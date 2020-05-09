@@ -295,26 +295,37 @@ namespace olc
 
 		constexpr uint8_t g() const
 		{
-			return static_cast<uint8_t>((pixel << 8) & 0xff);
+			return static_cast<uint8_t>((pixel >> 8) & 0xff);
 		}
 
 		constexpr uint8_t b() const
 		{
-			return static_cast<uint8_t>((pixel << 16) & 0xff);
+			return static_cast<uint8_t>((pixel >> 16) & 0xff);
 		}
 
 		constexpr uint8_t a() const
 		{
-			return static_cast<uint8_t>((pixel << 24) & 0xff);
+			return static_cast<uint8_t>((pixel >> 24) & 0xff);
 		}
 
 		enum Mode { NORMAL, MASK, ALPHA, CUSTOM };
 
-		Pixel():
-			Pixel{ 0, 0, 0 } { }
+		// WORKAROUND
+		constexpr void init_pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha)
+		{
+			pixel = static_cast<uint32_t>(red | (green << 8) | (blue << 16) | (alpha << 24));
+		}
 
-		Pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha):
-			pixel{ static_cast<uint32_t>(red | (green << 8) | (blue << 16) | (alpha << 24)) } { }
+		constexpr Pixel():
+			pixel{ 0 } { init_pixel(0, 0, 0); }//Pixel{ 0, 0, 0 } { }
+
+#if 0
+		constexpr Pixel(uint8_t red, uint8_t green, uint8_t blue):
+			pixel{ 0 } { init_pixel(red, green, blue); }//Pixel{ red, green, blue, nDefaultAlpha } { }
+#endif
+
+		constexpr Pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha):
+			pixel{ 0 } { init_pixel(red, green, blue, alpha); }//pixel{ static_cast<uint32_t>(red | (green << 8) | (blue << 16) | (alpha << 24)) } { }
 
 		Pixel(uint32_t p):
 			pixel{ p } { }
@@ -330,15 +341,15 @@ namespace olc
 	// O------------------------------------------------------------------------------O
 	// | USEFUL CONSTANTS                                                             |
 	// O------------------------------------------------------------------------------O
-	const Pixel
-	GREY(192, 192, 192), DARK_GREY(128, 128, 128), VERY_DARK_GREY(64, 64, 64),
-	RED(255, 0, 0),      DARK_RED(128, 0, 0),      VERY_DARK_RED(64, 0, 0),
-	YELLOW(255, 255, 0), DARK_YELLOW(128, 128, 0), VERY_DARK_YELLOW(64, 64, 0),
-	GREEN(0, 255, 0),    DARK_GREEN(0, 128, 0),    VERY_DARK_GREEN(0, 64, 0),
-	CYAN(0, 255, 255),   DARK_CYAN(0, 128, 128),   VERY_DARK_CYAN(0, 64, 64),
-	BLUE(0, 0, 255),     DARK_BLUE(0, 0, 128),     VERY_DARK_BLUE(0, 0, 64),
-	MAGENTA(255, 0, 255),DARK_MAGENTA(128, 0, 128),VERY_DARK_MAGENTA(64, 0, 64),
-	WHITE(255, 255, 255),BLACK(0, 0, 0),           BLANK(0, 0, 0, 0);
+	constexpr Pixel
+	GREY(192, 192, 192),  DARK_GREY(128, 128, 128), VERY_DARK_GREY(64, 64, 64),
+	RED(255, 0, 0),       DARK_RED(128, 0, 0),      VERY_DARK_RED(64, 0, 0),
+	YELLOW(255, 255, 0),  DARK_YELLOW(128, 128, 0), VERY_DARK_YELLOW(64, 64, 0),
+	GREEN(0, 255, 0),     DARK_GREEN(0, 128, 0),    VERY_DARK_GREEN(0, 64, 0),
+	CYAN(0, 255, 255),    DARK_CYAN(0, 128, 128),   VERY_DARK_CYAN(0, 64, 64),
+	BLUE(0, 0, 255),      DARK_BLUE(0, 0, 128),     VERY_DARK_BLUE(0, 0, 64),
+	MAGENTA(255, 0, 255), DARK_MAGENTA(128, 0, 128),VERY_DARK_MAGENTA(64, 0, 64),
+	WHITE(255, 255, 255), BLACK(0, 0, 0),           BLANK(0, 0, 0, 0);
 
 	enum Key
 	{
