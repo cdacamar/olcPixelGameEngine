@@ -52,11 +52,15 @@
 
 	Author
 	~~~~~~
-	David Barr, aka javidx9, ©OneLoneCoder 2018, 2019, 2020
+	David Barr, aka javidx9, ï¿½OneLoneCoder 2018, 2019, 2020
 */
 
 #define OLC_PGE_APPLICATION
+#ifndef NO_MODULES
+import "olcPixelGameEngine.h";
+#else
 #include "olcPixelGameEngine.h"
+#endif
 
 /*
 
@@ -170,8 +174,8 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-		rendSelect.Load("./gfx/dng_select.png");
-		rendAllWalls.Load("./gfx/oldDungeon.png");
+		rendSelect.Load("./dungeon.gif");
+		rendAllWalls.Load("./dungeon.gif");
 
 		world.Create(64, 64);
 
@@ -179,7 +183,7 @@ public:
 			for(int x=0; x<world.size.x; x++)
 			{
 				world.GetCell({ x, y }).wall = false;
-				world.GetCell({ x, y }).id[Face::Floor] = olc::vi2d{ 3, 0 } * vTileSize;
+				world.GetCell({ x, y }).id[Face::Floor] = olc::vi2d{ 3, 11 } * vTileSize;
 				world.GetCell({ x, y }).id[Face::Top] = olc::vi2d{ 1, 0 } * vTileSize;
 				world.GetCell({ x, y }).id[Face::North] = olc::vi2d{ 0, 6 } * vTileSize;
 				world.GetCell({ x, y }).id[Face::South] = olc::vi2d{ 0, 6 } * vTileSize;
@@ -394,7 +398,7 @@ public:
 			});
 				
 		// 4) Iterate through all "tile cubes" and draw their visible faces
-		Clear(olc::BLACK);
+		Clear(olc::GREEN);
 		for (auto& q : vQuads)
 			DrawPartialWarpedDecal
 			(
