@@ -11,5 +11,6 @@
 /std:c++latest
 /EHsc
 /experimental:module
+/permissive-
+/W4
 /headerUnit .\olcPixelGameEngine.h=.\olcPixelGameEngine.h.ifc
-/Bt+

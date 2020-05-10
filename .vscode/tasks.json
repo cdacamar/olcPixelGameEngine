@@ -3,70 +3,133 @@
     // for the documentation about the tasks.json format
     "version": "2.0.0",
     "tasks": [
-      {
-        "label": "build headers",
-        "type": "shell",
-        "options": {
-          "env": {
-            "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
-          }
+        {
+            "label": "build headers",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\lib.rsp"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": "build"
         },
-        "args": [
-          "@${workspaceFolder}\\lib.rsp"
-        ],
-        "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
-        "problemMatcher": [
-          "$msCompile"
-        ],
-        "group": {
-          "kind": "build",
-          "isDefault": true
-        }
-      },
-      {
-        "label": "build",
-        "type": "shell",
-        "options": {
-          "env": {
-            "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
-          }
+        {
+            "label": "build",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\cl.rsp",
+                "${workspaceFolder}\\Videos\\OneLoneCoder_PGE_DungeonWarping.cpp",
+                "/link onecore.lib opengl32.lib kernel32.lib gdiplus.lib gdi32.lib user32.lib Shlwapi.lib .\\olcPixelGameEngine.obj /out:Videos\\a.exe"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": "build"
         },
-        "args": [
-          "@${workspaceFolder}\\cl.rsp",
-          "${workspaceFolder}\\Videos\\OneLoneCoder_PGE_DungeonWarping.cpp",
-          "/link onecore.lib opengl32.lib kernel32.lib gdiplus.lib gdi32.lib user32.lib Shlwapi.lib .\\olcPixelGameEngine.obj /out:Videos\\a.exe"
-        ],
-        "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
-        "problemMatcher": [
-          "$msCompile"
-        ],
-        "group": {
-          "kind": "build",
-          "isDefault": true
-        }
-      },
-      {
-        "label": "build (no modules)",
-        "type": "shell",
-        "options": {
-          "env": {
-            "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
-          }
+        {
+            "label": "build (no modules)",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\cl.rsp",
+                "${workspaceFolder}\\Videos\\OneLoneCoder_PGE_DungeonWarping.cpp",
+                "/DNO_MODULES",
+                "/link onecore.lib kernel32.lib gdiplus.lib opengl32.lib gdi32.lib user32.lib Shlwapi.lib /out:Videos\\a.exe"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         },
-        "args": [
-          "@${workspaceFolder}\\cl.rsp",
-          "${workspaceFolder}\\Videos\\OneLoneCoder_PGE_DungeonWarping.cpp",
-          "/DNO_MODULES",
-          "/link onecore.lib kernel32.lib gdiplus.lib opengl32.lib gdi32.lib user32.lib Shlwapi.lib /out:Videos\\a.exe"
-        ],
-        "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
-        "problemMatcher": [
-          "$msCompile"
-        ],
-        "group": {
-          "kind": "build",
-          "isDefault": true
+        {
+            "label": "build (destory)",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\cl.rsp",
+                "${workspaceFolder}\\Videos\\destroy.cpp",
+                "/DNO_MODULES",
+                "/link onecore.lib kernel32.lib gdiplus.lib opengl32.lib gdi32.lib user32.lib Shlwapi.lib /out:Videos\\a.exe"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build (destory) (release)",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\cl_release.rsp",
+                "${workspaceFolder}\\Videos\\destroy.cpp",
+                "/DNO_MODULES",
+                "/link onecore.lib kernel32.lib gdiplus.lib opengl32.lib gdi32.lib user32.lib Shlwapi.lib /out:Videos\\a.exe"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "build (shadow)",
+            "type": "shell",
+            "options": {
+                "env": {
+                    "LIB": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\ATLMFC\\lib\\x86;C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\lib\\x86;C:\\Program Files (x86)\\Windows Kits\\NETFXSDK\\4.6.2\\lib\\um\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\ucrt\\x86;C:\\Program Files (x86)\\Windows Kits\\10\\lib\\10.0.17763.0\\um\\x86;"
+                }
+            },
+            "args": [
+                "@${workspaceFolder}\\cl.rsp",
+                "${workspaceFolder}\\Videos\\OneLoneCoder_PGE_ShadowCasting2D.cpp",
+                "/DNO_MODULES",
+                "/link onecore.lib kernel32.lib gdiplus.lib opengl32.lib gdi32.lib user32.lib Shlwapi.lib /out:Videos\\a.exe"
+            ],
+            "command": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Preview\\VC\\Tools\\MSVC\\14.26.28801\\bin\\Hostx86\\x86\\cl.exe",
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
         }
-      }
     ]
 }
