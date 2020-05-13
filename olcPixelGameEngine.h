@@ -396,6 +396,7 @@ namespace olc
 		inline operator v2d_generic<int32_t>() const { return { static_cast<int32_t>(this->x), static_cast<int32_t>(this->y) }; }
 		inline operator v2d_generic<float>() const { return { static_cast<float>(this->x), static_cast<float>(this->y) };     }
 		inline operator v2d_generic<double>() const { return { static_cast<double>(this->x), static_cast<double>(this->y) };  }
+		friend bool operator==(const v2d_generic&, const v2d_generic&) = default;
 	};
 
 	// Note: joshinils has some good suggestions here, but they are complicated to implement at this moment, 

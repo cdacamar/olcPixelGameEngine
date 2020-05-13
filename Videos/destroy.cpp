@@ -1,7 +1,11 @@
 #pragma warning(push)
 #pragma warning(disable: 4648)
+#include <cassert>
+
 #include <charconv>
 #include <concepts>
+#include <execution>
+#include <memory>
 #include <optional>
 #include <random>
 #include <type_traits>
@@ -15,6 +19,23 @@
 #undef min
 #undef max
 #pragma warning(pop)
+
+// Resources used:
+// Primary idea (pixel terrain):
+// * https://gamedevelopment.tutsplus.com/tutorials/coding-destructible-pixel-terrain-how-to-make-everything-explode--gamedev-45
+//
+// Collisions:
+// * https://spicyyoghurt.com/tutorials/html5-javascript-game-development/collision-detection-physics
+// * https://gamedevelopment.tutsplus.com/tutorials/when-worlds-collide-simulating-circle-circle-collisions--gamedev-769
+//
+// Line Drawing:
+// * https://www.gamedev.net/reference/articles/article1275.asp
+//
+// QuadTree:
+// * https://gamedevelopment.tutsplus.com/tutorials/quick-tip-use-quadtrees-to-detect-likely-collisions-in-2d-space--gamedev-374
+//
+// % Chance:
+// * https://gamedev.stackexchange.com/questions/22891/designing-drops-system-how-and-where-chance-of-drops-are-defined
 
 template <typename T>
 concept Enum = std::is_enum_v<T>;
@@ -71,7 +92,7 @@ RandomNumberGenerator& random_generator()
 {
     // The random number generator in <random> is HUGE and expensive to construct,
     // so we will only have one.
-    static RandomNumberGenerator generator { RandomSeed(2608642933) };
+    static RandomNumberGenerator generator;
     return generator;
 }
 
@@ -277,7 +298,7 @@ public:
             t = { h, TransitionType::Grass };
             next_transition<TransitionType::Grass>(t, world[i]);
 
-            h = static_cast<int>(entropy(.02f) * crust_to_rock);
+            h = static_cast<int>(crust_to_rock);
             t = { h, TransitionType::Crust };
             next_transition<TransitionType::Crust>(t, world[i]);
 
@@ -333,6 +354,10 @@ public:
             }
         }
         float len = std::sqrt(avg_x * avg_x + avg_y * avg_y);
+        if (len == .0f)
+        {
+            return { };
+        }
         return { avg_x / len, avg_y / len };
     }
 
@@ -506,6 +531,20 @@ std::optional<RayCastResult> cast_ray(const World& world, const olc::vi2d& start
     return { };
 }
 
+struct AABBBox
+{
+    olc::vi2d center = { };
+    Radius radius = { };
+};
+
+bool overlap_AABB(const AABBBox& first, const AABBBox& second)
+{
+    return first.center.x + rep(first.radius) + rep(second.radius) > second.center.x
+        && first.center.x < second.center.x + rep(first.radius) + rep(second.radius)
+        && first.center.y + rep(first.radius) + rep(second.radius) > second.center.y
+        && first.center.y < second.center.y + rep(first.radius) + rep(second.radius);
+}
+
 struct PhysicalProperties
 {
     float stickyness = 150.f;
@@ -516,7 +555,7 @@ class PhysicsPixel
 {
 public:
     PhysicsPixel(const olc::vi2d& pos, const olc::vf2d& velocity, olc::Pixel color, Radius radius, PhysicalProperties properties = { }):
-        pos{ pos }, vel{ velocity }, pixel_color{ color }, radius{ radius }, properties{ properties } { }
+        pos{ pos }, vel{ velocity }, pixel_color{ color }, r{ radius }, properties{ properties } { }
 
     void execute_step(World* world)
     {
@@ -539,34 +578,124 @@ public:
         }
     }
 
+    void dead(bool b)
+    {
+        exploded = b;
+    }
+
     bool dead() const
     {
         return exploded;
     }
 
-    const auto& position() const
+    const olc::vi2d& position() const
     {
         return pos;
     }
 
-    auto& position()
+    olc::vi2d& position()
     {
         return pos;
     }
 
-    const auto& velocity() const
+    const olc::vf2d& velocity() const
     {
         return vel;
     }
 
-    auto& velocity()
+    olc::vf2d& velocity()
     {
         return vel;
     }
 
-    auto& color() const
+    olc::Pixel color() const
     {
         return pixel_color;
+    }
+
+    Radius radius() const
+    {
+        return r;
+    }
+
+    bool single_point() const
+    {
+        return rep(radius()) == 0;
+    }
+
+    AABBBox bounding_box() const
+    {
+        return { position(), radius() };
+    }
+
+    static void collide(PhysicsPixel* a, PhysicsPixel* b)
+    {
+#if 0
+        auto a_vel = (2 * b->velocity()) / 2;
+        auto b_vel = (2 * a->velocity()) / 2;
+        a->vel = a_vel;
+        b->vel = b_vel;
+#else
+        if (isnan(a->velocity().x)
+            || isnan(a->velocity().y)
+            || isnan(b->velocity().x)
+            || isnan(b->velocity().y))
+        {
+            while (false)
+            {
+                break;
+            }
+        }
+        auto collision_vector = static_cast<olc::vf2d>(b->position() - a->position());
+        float distance = collision_vector.mag();
+        if (distance == .0f)
+        {
+            distance = .1f;
+        }
+        olc::vf2d collision_normal = collision_vector / distance;
+        auto relative_velocity = a->velocity() - b->velocity();
+        float speed = relative_velocity.dot(collision_normal);
+        // These objects are moving away from each other already.
+        if (speed < 0)
+        {
+            return;
+        }
+        auto new_a = collision_normal * speed;
+        auto new_b = collision_normal * speed;
+        if (   isnan(new_a.x)
+            || isnan(new_a.y)
+            || isnan(new_b.x)
+            || isnan(new_b.y))
+        {
+            while (false)
+            {
+                break;
+            }
+        }
+        a->velocity() -= new_a;
+        b->velocity() += new_b;
+        if (isnan(a->velocity().x)
+            || isnan(a->velocity().y)
+            || isnan(b->velocity().x)
+            || isnan(b->velocity().y))
+        {
+            while (false)
+            {
+                break;
+            }
+        }
+#if 0
+        a->velocity() -= collision_normal * speed;
+        b->velocity() += collision_normal * speed;
+#endif
+#endif
+    }
+
+    static bool collides_with(const PhysicsPixel& a, const PhysicsPixel& b)
+    {
+        auto angle = a.position() - b.position();
+        int distance_2 = angle.mag2();
+        return distance_2 < ((rep(a.radius()) + rep(b.radius())) * (rep(a.radius()) + rep(b.radius())));
     }
 private:
     void collide(const RayCastResult& result, World* world)
@@ -586,7 +715,46 @@ private:
 
     void adhere_to(World* world, const olc::vi2d& point)
     {
-        (*world)(point) = color();
+        if (single_point())
+        {
+            (*world)(point) = color();
+        }
+        else
+        {
+            // Taken from DrawCircle.
+            int x0 = 0;
+            int y0 = rep(radius());
+            int d = 3 - 2 * y0;
+            auto [x, y] = position();
+
+            auto adhere = [&](int sx, int ex, int ny)
+            {
+                for (int i = sx; i <= ex; i++)
+                {
+                    if (world->bounded(Row(ny), Column(i)))
+                    {
+                        (*world)(Row(ny), Column(i)) = color();
+                    }
+                }
+            };
+
+            while (y0 >= x0)
+            {
+                // Modified to draw scan-lines instead of edges
+                adhere(x - x0, x + x0, y - y0);
+                adhere(x - y0, x + y0, y - x0);
+                adhere(x - x0, x + x0, y + y0);
+                adhere(x - y0, x + y0, y + x0);
+                if (d < 0)
+                {
+                    d += 4 * x0++ + 6;
+                }
+                else
+                {
+                    d += 4 * (x0++ - y0--) + 10;
+                }
+            }
+        }
         exploded = true;
     }
 
@@ -598,10 +766,211 @@ private:
     olc::Pixel pixel_color;
     olc::vi2d pos;
     olc::vf2d vel;
-    Radius radius;
+    Radius r;
     olc::vi2d prev_pos = pos;
     PhysicalProperties properties;
     bool exploded = false;
+};
+
+enum class Level : int { };
+class BoundingBox
+{
+public:
+    BoundingBox(const olc::vi2d& upper_left, Width width, Height height):
+        upper_left{ upper_left }, w{ width }, h{ height } { }
+
+    int left() const
+    {
+        return upper_left.x;
+    }
+
+    int top() const
+    {
+        return upper_left.y;
+    }
+
+    int bottom() const
+    {
+        return top() + rep(height());
+    }
+
+    int right() const
+    {
+        return left() + rep(width());
+    }
+
+    Width width() const
+    {
+        return w;
+    }
+
+    Height height() const
+    {
+        return h;
+    }
+private:
+    olc::vi2d upper_left;
+    Width w;
+    Height h;
+};
+
+class QuadTree
+{
+    static constexpr int max_depth = 5;
+    static constexpr int split_factor = 20;
+public:
+    QuadTree(const olc::vi2d& upper_left, Width width, Height height, Level level):
+        rect{ upper_left, width, height }, level{ level } { }
+
+    void clear()
+    {
+        objects.clear();
+        trees = { }; // clear the existing trees.
+    }
+
+    void insert(PhysicsPixel* pixel)
+    {
+        internal_insert(box_for(*pixel), pixel);
+    }
+
+    template <std::invocable<PhysicsPixel*> F>
+    void for_each_in(const BoundingBox& box, F&& invocable) const
+    {
+        int i = index(box);
+        if (i != -1 && trees[i])
+        {
+            trees[i]->for_each_in(box, std::forward<F>(invocable));
+        }
+        for (PhysicsPixel* pixel : objects)
+        {
+            std::forward<F>(invocable)(pixel);
+        }
+    }
+
+    static BoundingBox box_for(const PhysicsPixel& pixel)
+    {
+        int r = rep(pixel.radius());
+        return { pixel.position(), Width(r), Height(r) };
+    }
+
+    std::vector<BoundingBox> all_boxes() const
+    {
+        std::vector<BoundingBox> boxes;
+        internal_all_boxes(&boxes);
+        return boxes;
+    }
+private:
+    void internal_all_boxes(std::vector<BoundingBox>* boxes) const
+    {
+        boxes->push_back(rect);
+
+        for (const auto& tree : trees)
+        {
+            if (tree)
+            {
+                tree->internal_all_boxes(boxes);
+            }
+        }
+    }
+
+    void internal_insert(const BoundingBox& box, PhysicsPixel* pixel)
+    {
+        if (trees[0])
+        {
+            int i = index(box);
+            if (i != -1)
+            {
+                trees[i]->internal_insert(box, pixel);
+                return;
+            }
+        }
+
+        objects.push_back(pixel);
+
+        if (objects.size() > split_factor && rep(level) < max_depth)
+        {
+            if (!trees[0])
+            {
+                split();
+            }
+
+            int i = 0;
+            while (i < static_cast<int>(objects.size()))
+            {
+                BoundingBox object_box = box_for(*objects[i]);
+                int idx = index(object_box);
+                if (idx != -1)
+                {
+                    trees[idx]->internal_insert(object_box, objects[i]);
+                    objects.erase(begin(objects) + i);
+                }
+                else
+                {
+                    ++i;
+                }
+            }
+        }
+    }
+
+    void split()
+    {
+        int sub_width = rep(rect.width()) / 2;
+        int sub_height = rep(rect.height()) / 2;
+        int x = rect.left();
+        int y = rect.top();
+        int next_level = rep(level) + 1;
+
+        trees[0] = std::make_unique<QuadTree>(olc::vi2d{ x + sub_width, y },              Width(sub_width), Height(sub_height), Level(next_level));
+        trees[1] = std::make_unique<QuadTree>(olc::vi2d{ x,             y },              Width(sub_width), Height(sub_height), Level(next_level));
+        trees[2] = std::make_unique<QuadTree>(olc::vi2d{ x,             y + sub_height }, Width(sub_width), Height(sub_height), Level(next_level));
+        trees[3] = std::make_unique<QuadTree>(olc::vi2d{ x + sub_width, y + sub_height }, Width(sub_width), Height(sub_height), Level(next_level));
+    }
+
+    int index(const BoundingBox& box) const
+    {
+        int index = -1;
+        float vert_mid = rect.left() + static_cast<float>(rep(rect.width())) / 2.f;
+        float horiz_mid = rect.top() + static_cast<float>(rep(rect.height())) / 2.f;
+
+        auto is_top = [&]
+        {
+            return box.top() < horiz_mid && box.bottom() < horiz_mid;
+        };
+        auto is_bottom = [&]
+        {
+            return box.top() > horiz_mid;
+        };
+
+        if (box.left() <= vert_mid && box.right() <= vert_mid)
+        {
+            if (is_top())
+            {
+                index = 1;
+            }
+            else if (is_bottom())
+            {
+                index = 2;
+            }
+        }
+        else if (box.left() >= vert_mid)
+        {
+            if (is_top())
+            {
+                index = 0;
+            }
+            else if (is_bottom())
+            {
+                index = 3;
+            }
+        }
+
+        return index;
+    }
+
+    std::array<std::unique_ptr<QuadTree>, max_depth> trees;
+    std::vector<PhysicsPixel*> objects;
+    BoundingBox rect;
+    const Level level;
 };
 
 class PhysicsEngine
@@ -620,6 +989,11 @@ public:
         int steps = static_cast<int>((elapsed_time + static_cast<float>(left_over_time)) / d_time_s);
         steps = std::min(steps, 1);
         left_over_time = static_cast<int>(d_time_s) - (steps * d_time);
+
+        if (all_collisions)
+        {
+            build_quadtree(world);
+        }
 
         constexpr int cull_dead_threshold = 50;
         int dead_count = 0;
@@ -643,6 +1017,24 @@ public:
             }
         }
 
+        // If we are doing extra interactions, do them.
+        if (all_collisions)
+        {
+#if 1
+            // Note: parallel for_each?
+            std::for_each(std::execution::par, begin(pixels_objects), end(pixels_objects),
+                [&](PhysicsPixel& pixel)
+                {
+                    intersect_objects(world, &pixel);
+                });
+#else
+            for (auto& pixel : pixels_objects)
+            {
+                intersect_objects(world, &pixel);
+            }
+#endif
+        }
+
         if (dead_count >= cull_dead_threshold)
         {
             pixels_objects.erase(std::remove_if(begin(pixels_objects),
@@ -659,9 +1051,63 @@ public:
     {
         return pixels_objects;
     }
+
+    void more_collisions(bool b)
+    {
+        all_collisions = b;
+    }
+
+    bool more_collisions() const
+    {
+        return all_collisions;
+    }
+
+    QuadTree* current_quad_tree() const
+    {
+        return quad_tree.get();
+    }
 private:
+    void build_quadtree(World* world)
+    {
+        quad_tree = nullptr;
+        quad_tree = std::make_unique<QuadTree>(olc::vi2d{ 0, 0 }, world->width(), world->height(), Level(0));
+        for (PhysicsPixel& pixel : pixels_objects)
+        {
+            if (!pixel.dead())
+            {
+                quad_tree->insert(&pixel);
+            }
+        }
+    }
+
+    void intersect_objects(World*, PhysicsPixel* pixel)
+    {
+        assert(quad_tree != nullptr);
+        quad_tree->for_each_in(QuadTree::box_for(*pixel),
+                            [&](PhysicsPixel* other)
+                            {
+                                if (other == pixel)
+                                {
+                                    return;
+                                }
+
+                                if (other->dead())
+                                {
+                                    return;
+                                }
+
+                                if (overlap_AABB(pixel->bounding_box(), other->bounding_box())
+                                    && PhysicsPixel::collides_with(*pixel, *other))
+                                {
+                                    PhysicsPixel::collide(pixel, other);
+                                }
+                            });
+    }
+
     int left_over_time = 0;
     std::vector<PhysicsPixel> pixels_objects;
+    std::unique_ptr<QuadTree> quad_tree;
+    bool all_collisions = true;
 };
 
 void explode(World* world, PhysicsEngine* physics_engine, const olc::vi2d& pos, float radius)
@@ -699,7 +1145,7 @@ void explode(World* world, PhysicsEngine* physics_engine, const olc::vi2d& pos, 
             {
                 physics_engine->add(PhysicsPixel{ { x, y },
                                                   { 0.f, 0.f },
-                                                  (*world)(Row(y), Column(x)), Radius(1),
+                                                  (*world)(Row(y), Column(x)), Radius(0),
                                                   destroyed_props });
                 (*world)(Row(y), Column(x)) = World::Blank;
             }
@@ -754,6 +1200,11 @@ public:
             changed = true;
         }
 
+        if (GetKey(olc::Key::P).bReleased)
+        {
+            physics_engine.more_collisions(!physics_engine.more_collisions());
+        }
+
         if (changed)
         {
             Clear(olc::BLACK);
@@ -766,7 +1217,10 @@ public:
         {
             std::uniform_real_distribution<float> dis_velocity_x{ 50.f, 1500.f };
             std::uniform_real_distribution<float> dis_velocity_y{ 50.f, 500.f };
+            std::uniform_real_distribution<float> dis_stickyness{ 150.f, 1500.f };
+            std::uniform_real_distribution<float> dis_friction{ .10f, .85f };
             std::uniform_int_distribution<int> dis_color{ 0, 255 };
+            std::uniform_int_distribution<int> dis_radius{ 0, 3 };
             for (int i = 0; i != 10; ++i)
             {
                 olc::vf2d velocity{ random_generator().generate(dis_velocity_x), random_generator().generate(dis_velocity_y) };
@@ -774,7 +1228,13 @@ public:
                     static_cast<uint8_t>(random_generator().generate(dis_color)),
                     static_cast<uint8_t>(random_generator().generate(dis_color)),
                     static_cast<uint8_t>(random_generator().generate(dis_color)) };
-                physics_engine.add(PhysicsPixel{ { GetMouseX(), GetMouseY() }, velocity, color, Radius(1) });
+                physics_engine.add(PhysicsPixel{ { GetMouseX(), GetMouseY() },
+                                                    velocity,
+                                                    color,
+                                                    Radius(random_generator().generate(dis_radius)),
+                                                    //Radius(0),
+                                                    { .stickyness = random_generator().generate(dis_stickyness),
+                                                      .friction = random_generator().generate(dis_friction) } });
             }
         }
 
@@ -859,14 +1319,42 @@ private:
             if (!pixel.dead())
             {
                 ++alive_particles;
-                Draw(pixel.position(), pixel.color());
+
+                if (pixel.single_point())
+                {
+                    Draw(pixel.position(), pixel.color());
+                }
+                else
+                {
+                    FillCircle(pixel.position(), rep(pixel.radius()), pixel.color());
+                }
             }
         }
+
+        if (GetKey(olc::Key::Q).bHeld)
         {
-            char buf[] = "Particle Count: xxxxxxxxxxxx";
-            auto [p, ec] = std::to_chars(buf + sizeof("Particle Count:"), std::end(buf), alive_particles);
-            *p = '\0';
-            DrawString({ 10, 20 }, {buf, p });
+            if (QuadTree* tree = physics_engine.current_quad_tree())
+            {
+                auto boxes = tree->all_boxes();
+                for (const BoundingBox& box : boxes)
+                {
+                    constexpr olc::Pixel color = olc::RED;
+                    // Top line
+                    DrawLine({ box.left(), box.top() }, { box.right(), box.top() }, color);
+                    // Right line
+                    DrawLine({ box.right(), box.top() }, { box.right(), box.bottom() }, color);
+                    // Bottom line
+                    DrawLine({ box.right(), box.bottom() }, { box.left(), box.bottom() }, color);
+                    // Left line
+                    DrawLine({ box.left(), box.bottom() }, { box.left(), box.top() }, color);
+                }
+            }
+        }
+
+        {
+            std::stringstream ss;
+            ss << "All collisions (" << (physics_engine.more_collisions() ? "on" : "off") << ") Particle Count: " << alive_particles;
+            DrawString({ 10, 20 }, ss.str());
         }
     }
 
@@ -891,6 +1379,7 @@ private:
             }
         }
     }
+
     std::vector<float> noise_seed(int size) const
     {
         std::vector<float> seed(size);
