@@ -10,6 +10,7 @@
 #include <random>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #define OLC_PGE_APPLICATION
@@ -45,6 +46,12 @@ using PrimitiveType = std::underlying_type_t<E>;
 
 template <Enum E>
 constexpr auto rep(E e) { return PrimitiveType<E>(e); }
+
+template <Enum E>
+constexpr auto retract(E e) { return E(rep(e) - 1); }
+
+template <Enum E>
+constexpr auto extend(E e) { return E(rep(e) + 1); }
 
 template <Enum E>
 constexpr E unit = { };
@@ -143,6 +150,11 @@ public:
             for (int octave = 0; octave < octave_count; ++octave)
             {
                 int pitch = (size >> octave);
+                // No future octave will solve this.
+                if (pitch == 0)
+                {
+                    break;
+                }
                 int sample1 = (x / pitch) * pitch;
                 int sample2 = (sample1 + pitch) % size;
 
@@ -164,6 +176,27 @@ private:
     int octave_count = 1;
 };
 
+std::vector<float> noise_seed(int size)
+{
+    std::vector<float> seed(size);
+    for (float& f : seed)
+    {
+        f = random_generator().from_0_to_1<float>();
+    }
+    return seed;
+}
+
+template <typename T>
+std::vector<float> noise_seed(int size, T&& distribution)
+{
+    std::vector<float> seed(size);
+    for (float& f : seed)
+    {
+        f = random_generator().generate(std::forward<T>(distribution));
+    }
+    return seed;
+}
+
 enum class Width : int32_t { };
 enum class Height : int32_t { };
 enum class Radius : int32_t { };
@@ -179,6 +212,684 @@ struct ScreenInfo
 
 enum class Row : int32_t { };
 enum class Column : int32_t { };
+
+enum class TransitionType
+{
+    Mountains,
+    Valley,
+    Lowlands,
+    Beach,
+
+    Count
+};
+
+template <typename T>
+concept Countable = requires(T) {
+    T::Count;
+};
+
+template <typename T>
+concept TransitionElementsModel = requires(T) {
+    T::Blank;
+} && Countable<T>;
+
+template <Countable T>
+constexpr bool last_of(T t)
+{
+    return extend(t) == T::Count;
+}
+
+template <TransitionElementsModel M, TransitionType Type>
+struct ComputedTransition
+{
+    struct Data
+    {
+        Row start = unit<Row>;
+        Height height = unit<Height>;
+        M type = M::Blank;
+    };
+
+    static constexpr TransitionType type = Type;
+
+    Data collection[rep(M::Count)] = { };
+};
+
+template <TransitionType type>
+struct TransitionProperties;
+
+namespace Colors
+{
+    constexpr auto blank = olc::BLANK;
+    constexpr auto snow = olc::WHITE;
+    constexpr auto crust = olc::Pixel{ 51, 25, 0 };
+    constexpr auto rock = olc::Pixel{ 64, 64, 64 };
+    constexpr auto lava = olc::RED;
+    constexpr auto grass = olc::Pixel{ 51, 102, 0 };
+    constexpr auto clay = olc::Pixel{ 95, 25, 0 };
+    constexpr auto sand = olc::YELLOW;
+}
+
+template <>
+struct TransitionProperties<TransitionType::Mountains>
+{
+    enum class TransitionElements
+    {
+        Blank,
+        Snow,
+        Crust,
+        Rock,
+        Lava,
+
+        Count
+    };
+
+    static constexpr olc::Pixel transition_colors[rep(TransitionElements::Count)] =
+        {
+            Colors::blank,
+            Colors::snow,
+            Colors::crust,
+            Colors::rock,
+            Colors::lava,
+        };
+};
+
+template <>
+struct TransitionProperties<TransitionType::Valley>
+{
+    enum class TransitionElements
+    {
+        Blank,
+        Grass,
+        Crust,
+        Clay,
+        Rock,
+
+        Count
+    };
+
+    static constexpr olc::Pixel transition_colors[rep(TransitionElements::Count)] =
+        {
+            Colors::blank,
+            Colors::grass,
+            Colors::crust,
+            Colors::clay,
+            Colors::rock,
+        };
+};
+
+template <>
+struct TransitionProperties<TransitionType::Lowlands>
+{
+    enum class TransitionElements
+    {
+        Blank,
+        Grass,
+        Crust,
+        Clay,
+        Rock,
+
+        Count
+    };
+
+    static constexpr olc::Pixel transition_colors[rep(TransitionElements::Count)] =
+        {
+            Colors::blank,
+            Colors::grass,
+            Colors::crust,
+            Colors::clay,
+            Colors::rock,
+        };
+};
+
+template <>
+struct TransitionProperties<TransitionType::Beach>
+{
+    enum class TransitionElements
+    {
+        Blank,
+        Sand,
+        Crust,
+        Clay,
+        Rock,
+
+        Count
+    };
+
+    static constexpr olc::Pixel transition_colors[rep(TransitionElements::Count)] =
+        {
+            Colors::blank,
+            Colors::sand,
+            Colors::crust,
+            Colors::clay,
+            Colors::rock,
+        };
+};
+
+template <TransitionType T>
+using ElementsOf = typename TransitionProperties<T>::TransitionElements;
+
+template <TransitionType T>
+using ComputedTransitionFor = ComputedTransition<ElementsOf<T>, T>;
+
+// Ugh... I wish pack expansions were easier...
+template <typename>
+struct TransitionVariantImpl;
+
+template <std::size_t... Transitions>
+struct TransitionVariantImpl<std::index_sequence<Transitions...>>
+{
+    using Type = std::variant<ComputedTransitionFor<TransitionType(Transitions)>...>;
+};
+
+using TransitionVariant = TransitionVariantImpl<std::make_index_sequence<rep(TransitionType::Count)>>::Type;
+
+constexpr TransitionType type_of(const TransitionVariant& v)
+{
+    return TransitionType(v.index());
+}
+
+constexpr TransitionVariant transition_variant(TransitionType type)
+{
+    switch (type)
+    {
+    case TransitionType::Mountains:
+        return ComputedTransitionFor<TransitionType::Mountains>{ };
+    case TransitionType::Valley:
+        return ComputedTransitionFor<TransitionType::Valley>{ };
+    case TransitionType::Lowlands:
+        return ComputedTransitionFor<TransitionType::Lowlands>{ };
+    case TransitionType::Beach:
+        return ComputedTransitionFor<TransitionType::Beach>{ };
+    }
+    return { };
+}
+
+class WorldHeightGenerator
+{
+public:
+    void generate(Width width, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        world.resize(rep(width));
+        generate_terrain_types(width);
+        generate_height_maps(width, height, noise_generator);
+    }
+
+    olc::Pixel pixel_for_compute(Row row, Column col) const
+    {
+        const auto& data = world[rep(col)];
+        switch (type_of(data))
+        {
+        case TransitionType::Mountains:
+            return pixel_for_compute_internal(as_collection<TransitionType::Mountains>(col), row);
+        case TransitionType::Valley:
+            return pixel_for_compute_internal(as_collection<TransitionType::Valley>(col), row);
+        case TransitionType::Lowlands:
+            return pixel_for_compute_internal(as_collection<TransitionType::Lowlands>(col), row);
+        case TransitionType::Beach:
+            return pixel_for_compute_internal(as_collection<TransitionType::Beach>(col), row);
+        }
+        return olc::BLANK;
+    }
+
+private:
+    template <typename T>
+    olc::Pixel pixel_for_compute_internal(const T& data, Row row) const
+    {
+        for (const auto& transition : data.collection)
+        {
+            if (rep(row) <= (rep(transition.start) + rep(transition.height)))
+            {
+                return TransitionProperties<T::type>::transition_colors[rep(transition.type)];
+            }
+        }
+        return olc::BLANK;
+    }
+
+    static TransitionType initial_state()
+    {
+        std::uniform_int_distribution<int> dis{ rep(unit<TransitionType>), rep(TransitionType::Count) };
+        return TransitionType(random_generator().generate(dis));
+    }
+
+    // Terrain type generator.
+    void generate_terrain_types(Width width)
+    {
+        // Populate the initial state.
+        transition_to(initial_state(), Column(0));
+        for (int i = 1; i != rep(width); ++i)
+        {
+            terrain_handle_state(Column(i));
+        }
+    }
+
+    // State transition handlers for terrain types.
+    void terrain_handle_state(Column col)
+    {
+        Column previous = retract(col);
+        switch (type_of(world[rep(previous)]))
+        {
+        case TransitionType::Mountains:
+            terrain_handle_mountain_state(col);
+            break;
+        case TransitionType::Valley:
+            terrain_handle_valley_state(col);
+            break;
+        case TransitionType::Lowlands:
+            terrain_handle_lowlands_state(col);
+            break;
+        case TransitionType::Beach:
+            terrain_handle_beach_state(col);
+            break;
+        }
+    }
+
+    void terrain_handle_mountain_state(Column col)
+    {
+        const float max_width = static_cast<float>(world.size()) * .7f;
+        const float min_width = static_cast<float>(world.size()) * .1f;
+        constexpr int chance_for_next = 0;
+        if (current_state_width < static_cast<int>(min_width))
+        {
+            continue_transition(col);
+            return;
+        }
+
+        if (current_state_width >= static_cast<int>(max_width))
+        {
+            transition_to(extend(TransitionType::Mountains), col);
+            return;
+        }
+        // Roll the dice!
+        if (random_generator().from_0_to_100<int>() < chance_for_next)
+        {
+            transition_to(extend(TransitionType::Mountains), col);
+        }
+        else
+        {
+            continue_transition(col);
+        }
+    }
+
+    void terrain_handle_valley_state(Column col)
+    {
+        const float max_width = static_cast<float>(world.size()) * .2f;
+        const float min_width = static_cast<float>(world.size()) * .1f;
+        constexpr int chance_for_next = 1;
+        if (current_state_width < static_cast<int>(min_width))
+        {
+            continue_transition(col);
+            return;
+        }
+
+        if (current_state_width >= static_cast<int>(max_width))
+        {
+            if (random_generator().from_0_to_100<int>() < chance_for_next)
+            {
+                transition_to(extend(TransitionType::Valley), col);
+            }
+            else
+            {
+                transition_to(retract(TransitionType::Valley), col);
+            }
+            return;
+        }
+        // Roll the dice!
+        chance_transition<TransitionType::Valley>(col);
+    }
+
+    void terrain_handle_lowlands_state(Column col)
+    {
+        const float max_width = static_cast<float>(world.size()) * .4f;
+        const float min_width = static_cast<float>(world.size()) * .2f;
+        constexpr int chance_for_next = 1;
+        if (current_state_width < static_cast<int>(min_width))
+        {
+            continue_transition(col);
+            return;
+        }
+
+        if (current_state_width >= static_cast<int>(max_width))
+        {
+            if (random_generator().from_0_to_100<int>() < chance_for_next)
+            {
+                transition_to(extend(TransitionType::Lowlands), col);
+            }
+            else
+            {
+                transition_to(retract(TransitionType::Lowlands), col);
+            }
+            return;
+        }
+        // Roll the dice!
+        chance_transition<TransitionType::Lowlands>(col);
+    }
+
+    void terrain_handle_beach_state(Column col)
+    {
+        const float max_width = static_cast<float>(world.size()) * .2f;
+        const float min_width = static_cast<float>(world.size()) * .08f;
+        constexpr int chance_for_previous = 1;
+        if (current_state_width < static_cast<int>(min_width))
+        {
+            continue_transition(col);
+            return;
+        }
+
+        if (current_state_width >= static_cast<int>(max_width))
+        {
+            transition_to(retract(TransitionType::Beach), col);
+            return;
+        }
+        // Roll the dice!
+        if (random_generator().from_0_to_100<int>() < chance_for_previous)
+        {
+            transition_to(retract(TransitionType::Beach), col);
+        }
+        else
+        {
+            continue_transition(col);
+        }
+        // Add more if we hit this.
+        static_assert(last_of(TransitionType::Beach));
+    }
+
+    void continue_transition(Column col)
+    {
+        world[rep(col)] = world[rep(retract(col))];
+        ++current_state_width;
+    }
+
+    void transition_to(TransitionType type, Column col)
+    {
+        world[rep(col)] = transition_variant(type);
+        current_state_width = 1;
+    }
+
+    template <TransitionType Type>
+    void chance_transition(Column col)
+    {
+        static_assert(!last_of(Type));
+        static_assert(Type != unit<TransitionType>);
+        std::uniform_int_distribution<int> dis{ rep(retract(Type)), rep(extend(Type)) };
+        auto new_type = TransitionType(random_generator().generate(dis));
+        if (new_type == Type)
+        {
+            continue_transition(col);
+        }
+        else
+        {
+            transition_to(new_type, col);
+        }
+    }
+
+    // Height map generation.
+    void generate_height_maps(Width width, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        for (int i = 0; i < rep(width);)
+        {
+            i += height_map_handle_state(Column(i), height, noise_generator);
+        }
+    }
+
+    // Returns the new column to be processed by caller.
+    int height_map_handle_state(Column col, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        switch (type_of(world[rep(col)]))
+        {
+        case TransitionType::Mountains:
+            return height_map_handle_mountain_state(col, height, noise_generator);
+        case TransitionType::Valley:
+            return height_map_handle_valley_state(col, height, noise_generator);
+        case TransitionType::Lowlands:
+            return height_map_handle_lowlands_state(col, height, noise_generator);
+        case TransitionType::Beach:
+            return height_map_handle_beach_state(col, height, noise_generator);
+        }
+        return 0;
+    }
+
+    int height_map_handle_mountain_state(Column col, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        // Find the width of this terrain.
+        constexpr auto T = TransitionType::Mountains;
+        int length = terrain_length_from<T>(col);
+        std::uniform_real_distribution<float> dis{ 0.05f, 1.f };
+        noise_generator->seed_generator(transitional_noise(col, height, Width(length), dis));
+        noise_generator->octave(8);
+        noise_generator->scaling(1.2f);
+        auto noise = noise_generator->generate();
+        // Probability constants:
+        const auto blank_to_snow = [&](Column off) { return rep(height) * noise[rep(off) - rep(col)]; };
+        const auto snow_to_crust = rep(height) * .01f;
+        const auto crust_to_rock = rep(height) * .05f;
+        const auto rock_to_lava = rep(height) * .5f;
+        for (int i = rep(col); i != rep(col) + length; ++i)
+        {
+            using E = ElementsOf<T>;
+            int h = static_cast<int>(entropy(.05f) * blank_to_snow(Column(i)));
+            populate_transition<T, E::Blank>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * snow_to_crust);
+            populate_transition<T, E::Snow>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * crust_to_rock);
+            populate_transition<T, E::Crust>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * rock_to_lava);
+            populate_transition<T, E::Rock>(as_collection<T>(Column(i)), Height(h));
+
+            // The last one we simply pass the height of the map and it figures out the rest.
+            populate_transition<T, E::Lava>(as_collection<T>(Column(i)), height);
+            static_assert(last_of(E::Lava));
+        }
+        return length;
+    }
+
+    int height_map_handle_valley_state(Column col, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        // Find the width of this terrain.
+        constexpr auto T = TransitionType::Valley;
+        int length = terrain_length_from<T>(col);
+        std::uniform_real_distribution<float> dis{ 0.2f, 0.3f };
+        noise_generator->seed_generator(transitional_noise(col, height, Width(length), dis));
+        noise_generator->octave(4);
+        noise_generator->scaling(1.2f);
+        auto noise = noise_generator->generate();
+        // Probability constants:
+        const auto blank_to_grass = [&](Column off) { return rep(height) * noise[rep(off) - rep(col)]; };
+        const auto grass_to_crust = rep(height) * .01f;
+        const auto crust_to_clay = rep(height) * .05f;
+        const auto clay_to_rock = rep(height) * .5f;
+        for (int i = rep(col); i != rep(col) + length; ++i)
+        {
+            using E = ElementsOf<T>;
+            int h = static_cast<int>(entropy(.03f) * blank_to_grass(Column(i)));
+            populate_transition<T, E::Blank>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * grass_to_crust);
+            populate_transition<T, E::Grass>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * crust_to_clay);
+            populate_transition<T, E::Crust>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * clay_to_rock);
+            populate_transition<T, E::Clay>(as_collection<T>(Column(i)), Height(h));
+
+            // The last one we simply pass the height of the map and it figures out the rest.
+            populate_transition<T, E::Rock>(as_collection<T>(Column(i)), height);
+            static_assert(last_of(E::Rock));
+        }
+        return length;
+    }
+
+    int height_map_handle_lowlands_state(Column col, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        // Find the width of this terrain.
+        constexpr auto T = TransitionType::Lowlands;
+        int length = terrain_length_from<T>(col);
+        std::uniform_real_distribution<float> dis{ 0.8f, 0.9f };
+        noise_generator->seed_generator(transitional_noise(col, height, Width(length), dis));
+        noise_generator->octave(2);
+        noise_generator->scaling(1.2f);
+        auto noise = noise_generator->generate();
+        // Probability constants:
+        const auto blank_to_grass = [&](Column off) { return rep(height) * noise[rep(off) - rep(col)]; };
+        const auto grass_to_crust = rep(height) * .01f;
+        const auto crust_to_clay = rep(height) * .05f;
+        const auto clay_to_rock = rep(height) * .5f;
+        for (int i = rep(col); i != rep(col) + length; ++i)
+        {
+            using E = ElementsOf<T>;
+            int h = static_cast<int>(entropy(.01f) * blank_to_grass(Column(i)));
+            populate_transition<T, E::Blank>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * grass_to_crust);
+            populate_transition<T, E::Grass>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * crust_to_clay);
+            populate_transition<T, E::Crust>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * clay_to_rock);
+            populate_transition<T, E::Clay>(as_collection<T>(Column(i)), Height(h));
+
+            // The last one we simply pass the height of the map and it figures out the rest.
+            populate_transition<T, E::Rock>(as_collection<T>(Column(i)), height);
+            static_assert(last_of(E::Rock));
+        }
+        return length;
+    }
+
+    int height_map_handle_beach_state(Column col, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        // Find the width of this terrain.
+        constexpr auto T = TransitionType::Beach;
+        int length = terrain_length_from<T>(col);
+        std::uniform_real_distribution<float> dis{ 0.95f, 1.f };
+        noise_generator->seed_generator(transitional_noise(col, height, Width(length), dis));
+        noise_generator->octave(1);
+        noise_generator->scaling(2.2f);
+        auto noise = noise_generator->generate();
+        // Probability constants:
+        const auto blank_to_sand = [&](Column off) { return rep(height) * noise[rep(off) - rep(col)]; };
+        const auto sand_to_crust = rep(height) * .01f;
+        const auto crust_to_clay = rep(height) * .05f;
+        const auto clay_to_rock = rep(height) * .5f;
+        for (int i = rep(col); i != rep(col) + length; ++i)
+        {
+            using E = ElementsOf<T>;
+            int h = static_cast<int>(blank_to_sand(Column(i)));
+            populate_transition<T, E::Blank>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * sand_to_crust);
+            populate_transition<T, E::Sand>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * crust_to_clay);
+            populate_transition<T, E::Crust>(as_collection<T>(Column(i)), Height(h));
+
+            h = static_cast<int>(entropy(.05f) * clay_to_rock);
+            populate_transition<T, E::Clay>(as_collection<T>(Column(i)), Height(h));
+
+            // The last one we simply pass the height of the map and it figures out the rest.
+            populate_transition<T, E::Rock>(as_collection<T>(Column(i)), height);
+            static_assert(last_of(E::Rock));
+        }
+        return length;
+    }
+
+    template <TransitionType Type>
+    ComputedTransitionFor<Type>& as_collection(Column col)
+    {
+        return std::get<ComputedTransitionFor<Type>>(world[rep(col)]);
+    }
+
+    template <TransitionType Type>
+    const ComputedTransitionFor<Type>& as_collection(Column col) const
+    {
+        return std::get<ComputedTransitionFor<Type>>(world[rep(col)]);
+    }
+
+    template <TransitionType Type, ElementsOf<Type> E, typename Collection>
+    void populate_transition(Collection& collection, Height height)
+    {
+        // First height.
+        if constexpr (E == ElementsOf<Type>::Blank)
+        {
+            collection.collection[rep(E)] = { Row(0), height, E };
+        }
+        // Last height (goes to bottom).
+        else if constexpr (last_of(E))
+        {
+            const auto& prev = collection.collection[rep(retract(E))];
+            auto prev_row_end = Row(rep(prev.start) + rep(prev.height));
+            collection.collection[rep(E)] = { prev_row_end, Height(rep(height) - rep(prev_row_end)), E };
+        }
+        else
+        {
+            const auto& prev = collection.collection[rep(retract(E))];
+            auto prev_row_end = Row(rep(prev.start) + rep(prev.height));
+            collection.collection[rep(E)] = { prev_row_end, height, E };
+        }
+    }
+
+    template <TransitionType Type>
+    int terrain_length_from(Column col) const
+    {
+        int length = 0;
+        for (int i = rep(col), last = static_cast<int>(world.size()); i != last; ++i)
+        {
+            if (type_of(world[i]) == Type)
+            {
+                ++length;
+            }
+            else
+            {
+                break;
+            }
+        }
+        return length;
+    }
+
+    template <typename T>
+    std::vector<float> transitional_noise(Column col, Height height, Width width, T&& distribution) const
+    {
+        if (rep(col) == 0)
+        {
+            return noise_seed(rep(width), std::forward<T>(distribution));
+        }
+        float previous_noise = static_cast<float>(top_of(retract(col))) / rep(height);
+        auto seed = noise_seed(rep(width), std::forward<T>(distribution));
+        seed.insert(begin(seed), previous_noise);
+        return seed;
+    }
+
+    Row top_of(Column col) const
+    {
+        const auto& data = world[rep(col)];
+        switch (type_of(data))
+        {
+        case TransitionType::Mountains:
+            return top_of_internal(as_collection<TransitionType::Mountains>(col));
+        case TransitionType::Valley:
+            return top_of_internal(as_collection<TransitionType::Valley>(col));
+        case TransitionType::Lowlands:
+            return top_of_internal(as_collection<TransitionType::Lowlands>(col));
+        case TransitionType::Beach:
+            return top_of_internal(as_collection<TransitionType::Beach>(col));
+        }
+        return unit<Row>;
+    }
+
+    template <typename T>
+    Row top_of_internal(const T& collection) const
+    {
+        constexpr auto first_non_blank = extend(ElementsOf<T::type>::Blank);
+        return collection.collection[rep(first_non_blank)].start;
+    }
+
+    std::vector<TransitionVariant> world;
+    int current_state_width = 0;
+};
+
 class World
 {
     enum class TransitionType
@@ -274,6 +985,22 @@ public:
     std::vector<olc::Pixel>& computed_world()
     {
         return computed_pixels;
+    }
+
+    void generate_new(Width width, Height height, PerlinNoiseGenerator* noise_generator)
+    {
+        world_dimensions(width, height);
+        WorldHeightGenerator generator;
+        generator.generate(width, height, noise_generator);
+
+        computed_pixels.resize(rep(width) * rep(height));
+        for (int i = 0; i != rep(height); ++i)
+        {
+            for (int j = 0; j != rep(width); ++j)
+            {
+                computed_pixels[j + i * rep(width)] = generator.pixel_for_compute(Row(i), Column(j));
+            }
+        }
     }
 
     void generate_world(Width width, Height height, const PerlinNoiseGenerator& noise_generator)
@@ -630,22 +1357,6 @@ public:
 
     static void collide(PhysicsPixel* a, PhysicsPixel* b)
     {
-#if 0
-        auto a_vel = (2 * b->velocity()) / 2;
-        auto b_vel = (2 * a->velocity()) / 2;
-        a->vel = a_vel;
-        b->vel = b_vel;
-#else
-        if (isnan(a->velocity().x)
-            || isnan(a->velocity().y)
-            || isnan(b->velocity().x)
-            || isnan(b->velocity().y))
-        {
-            while (false)
-            {
-                break;
-            }
-        }
         auto collision_vector = static_cast<olc::vf2d>(b->position() - a->position());
         float distance = collision_vector.mag();
         if (distance == .0f)
@@ -660,35 +1371,8 @@ public:
         {
             return;
         }
-        auto new_a = collision_normal * speed;
-        auto new_b = collision_normal * speed;
-        if (   isnan(new_a.x)
-            || isnan(new_a.y)
-            || isnan(new_b.x)
-            || isnan(new_b.y))
-        {
-            while (false)
-            {
-                break;
-            }
-        }
-        a->velocity() -= new_a;
-        b->velocity() += new_b;
-        if (isnan(a->velocity().x)
-            || isnan(a->velocity().y)
-            || isnan(b->velocity().x)
-            || isnan(b->velocity().y))
-        {
-            while (false)
-            {
-                break;
-            }
-        }
-#if 0
         a->velocity() -= collision_normal * speed;
         b->velocity() += collision_normal * speed;
-#endif
-#endif
     }
 
     static bool collides_with(const PhysicsPixel& a, const PhysicsPixel& b)
@@ -1205,10 +1889,26 @@ public:
             physics_engine.more_collisions(!physics_engine.more_collisions());
         }
 
+        if (GetKey(olc::Key::G).bReleased)
+        {
+            old_generated = !old_generated;
+            if (old_generated)
+            {
+                noise_generator.seed_generator(noise_seed(rep(screen_info.width)));
+            }
+        }
+
         if (changed)
         {
             Clear(olc::BLACK);
-            world.generate_world(screen_info.width, screen_info.height, noise_generator);
+            if (old_generated)
+            {
+                world.generate_world(screen_info.width, screen_info.height, noise_generator);
+            }
+            else
+            {
+                world.generate_new(screen_info.width, screen_info.height, &noise_generator);
+            }
         }
 
         physics_engine.update(elapsed_time, &world);
@@ -1380,16 +2080,6 @@ private:
         }
     }
 
-    std::vector<float> noise_seed(int size) const
-    {
-        std::vector<float> seed(size);
-        for (float& f : seed)
-        {
-            f = random_generator().from_0_to_1<float>();
-        }
-        return seed;
-    }
-
     ScreenInfo screen_info;
     World world;
     PerlinNoiseGenerator noise_generator;
@@ -1398,6 +2088,7 @@ private:
     // Debug info stuff
     std::vector<std::pair<olc::vi2d, olc::vi2d>> computed_normals;
     std::string display_text;
+    bool old_generated = false; // Use old random generated terrain.
 };
 
 int main()
