@@ -200,6 +200,7 @@ std::vector<float> noise_seed(int size, T&& distribution)
 enum class Width : int32_t { };
 enum class Height : int32_t { };
 enum class Radius : int32_t { };
+enum class Weight : int32_t { };
 enum class PixelWidth : int32_t { };
 enum class PixelHeight : int32_t { };
 struct ScreenInfo
@@ -1281,8 +1282,8 @@ struct PhysicalProperties
 class PhysicsPixel
 {
 public:
-    PhysicsPixel(const olc::vi2d& pos, const olc::vf2d& velocity, olc::Pixel color, Radius radius, PhysicalProperties properties = { }):
-        pos{ pos }, vel{ velocity }, pixel_color{ color }, r{ radius }, properties{ properties } { }
+    PhysicsPixel(const olc::vi2d& pos, const olc::vf2d& velocity, olc::Pixel color, Radius radius, Weight weight = Weight(1), PhysicalProperties properties = { }):
+        pos{ pos }, vel{ velocity }, pixel_color{ color }, r{ radius }, w{ weight }, properties{ properties } { }
 
     void execute_step(World* world)
     {
@@ -1345,6 +1346,11 @@ public:
         return r;
     }
 
+    Weight weight() const
+    {
+        return w;
+    }
+
     bool single_point() const
     {
         return rep(radius()) == 0;
@@ -1371,8 +1377,9 @@ public:
         {
             return;
         }
-        a->velocity() -= collision_normal * speed;
-        b->velocity() += collision_normal * speed;
+        float impulse = 2 * speed / (rep(a->weight()) + rep(b->weight()));
+        a->velocity() -= collision_normal * impulse * static_cast<float>(rep(b->weight()));
+        b->velocity() += collision_normal * impulse * static_cast<float>(rep(a->weight()));
     }
 
     static bool collides_with(const PhysicsPixel& a, const PhysicsPixel& b)
@@ -1451,6 +1458,7 @@ private:
     olc::vi2d pos;
     olc::vf2d vel;
     Radius r;
+    Weight w;
     olc::vi2d prev_pos = pos;
     PhysicalProperties properties;
     bool exploded = false;
@@ -1829,7 +1837,9 @@ void explode(World* world, PhysicsEngine* physics_engine, const olc::vi2d& pos, 
             {
                 physics_engine->add(PhysicsPixel{ { x, y },
                                                   { 0.f, 0.f },
-                                                  (*world)(Row(y), Column(x)), Radius(0),
+                                                  (*world)(Row(y), Column(x)),
+                                                  Radius(0),
+                                                  Weight(1),
                                                   destroyed_props });
                 (*world)(Row(y), Column(x)) = World::Blank;
             }
@@ -1920,7 +1930,7 @@ public:
             std::uniform_real_distribution<float> dis_stickyness{ 150.f, 1500.f };
             std::uniform_real_distribution<float> dis_friction{ .10f, .85f };
             std::uniform_int_distribution<int> dis_color{ 0, 255 };
-            std::uniform_int_distribution<int> dis_radius{ 0, 3 };
+            std::uniform_int_distribution<int> dis_radius{ 0, 10 };
             for (int i = 0; i != 10; ++i)
             {
                 olc::vf2d velocity{ random_generator().generate(dis_velocity_x), random_generator().generate(dis_velocity_y) };
@@ -1928,11 +1938,14 @@ public:
                     static_cast<uint8_t>(random_generator().generate(dis_color)),
                     static_cast<uint8_t>(random_generator().generate(dis_color)),
                     static_cast<uint8_t>(random_generator().generate(dis_color)) };
+                auto radius = random_generator().generate(dis_radius);
+                auto weight = radius * 2 + 1;
                 physics_engine.add(PhysicsPixel{ { GetMouseX(), GetMouseY() },
                                                     velocity,
                                                     color,
-                                                    Radius(random_generator().generate(dis_radius)),
+                                                    Radius(radius),
                                                     //Radius(0),
+                                                    Weight(weight),
                                                     { .stickyness = random_generator().generate(dis_stickyness),
                                                       .friction = random_generator().generate(dis_friction) } });
             }
@@ -2088,13 +2101,13 @@ private:
     // Debug info stuff
     std::vector<std::pair<olc::vi2d, olc::vi2d>> computed_normals;
     std::string display_text;
-    bool old_generated = false; // Use old random generated terrain.
+    bool old_generated = true; // Use old random generated terrain.
 };
 
 int main()
 {
     Game game;
-    if (game.Construct({ Width(1024), Height(768), PixelWidth(1), PixelHeight(1) }))
+    if (game.Construct({ Width(1540), Height(978), PixelWidth(1), PixelHeight(1) }))
     {
         game.Start();
     }
