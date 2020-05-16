@@ -1682,15 +1682,15 @@ public:
         steps = std::min(steps, 1);
         left_over_time = static_cast<int>(d_time_s) - (steps * d_time);
 
-        if (all_collisions)
-        {
-            build_quadtree(world);
-        }
-
         constexpr int cull_dead_threshold = 50;
         int dead_count = 0;
         for (int i = 1; i <= steps; ++i)
         {
+            if (all_collisions)
+            {
+                clear_quadtree(world);
+            }
+
             for (auto& pixel : pixels_objects)
             {
                 if (pixel.dead())
@@ -1706,25 +1706,30 @@ public:
                 pixel.position() += pixel.velocity() * d_time_s;
 
                 pixel.execute_step(world);
-            }
-        }
 
-        // If we are doing extra interactions, do them.
-        if (all_collisions)
-        {
+                if (all_collisions)
+                {
+                    quad_tree->insert(&pixel);
+                }
+            }
+
+            // If we are doing extra interactions, do them.
+            if (all_collisions)
+            {
 #if 1
-            // Note: parallel for_each?
-            std::for_each(std::execution::par, begin(pixels_objects), end(pixels_objects),
-                [&](PhysicsPixel& pixel)
+                // Note: parallel for_each?
+                std::for_each(std::execution::par, begin(pixels_objects), end(pixels_objects),
+                    [&](PhysicsPixel& pixel)
+                    {
+                        intersect_objects(world, &pixel);
+                    });
+#else
+                for (auto& pixel : pixels_objects)
                 {
                     intersect_objects(world, &pixel);
-                });
-#else
-            for (auto& pixel : pixels_objects)
-            {
-                intersect_objects(world, &pixel);
-            }
+                }
 #endif
+            }
         }
 
         if (dead_count >= cull_dead_threshold)
@@ -1759,17 +1764,10 @@ public:
         return quad_tree.get();
     }
 private:
-    void build_quadtree(World* world)
+    void clear_quadtree(const World* world)
     {
         quad_tree = nullptr;
         quad_tree = std::make_unique<QuadTree>(olc::vi2d{ 0, 0 }, world->width(), world->height(), Level(0));
-        for (PhysicsPixel& pixel : pixels_objects)
-        {
-            if (!pixel.dead())
-            {
-                quad_tree->insert(&pixel);
-            }
-        }
     }
 
     void intersect_objects(World*, PhysicsPixel* pixel)
