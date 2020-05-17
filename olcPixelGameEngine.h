@@ -286,19 +286,51 @@ namespace olc
 	// O------------------------------------------------------------------------------O
 	struct Pixel
 	{
-		union
+		uint32_t pixel;
+
+		constexpr uint8_t r() const
 		{
-			uint32_t n = nDefaultPixel;
-			struct { uint8_t r; uint8_t g; uint8_t b; uint8_t a; };
-		};
+			return static_cast<uint8_t>(pixel & 0xff);
+		}
+
+		constexpr uint8_t g() const
+		{
+			return static_cast<uint8_t>((pixel >> 8) & 0xff);
+		}
+
+		constexpr uint8_t b() const
+		{
+			return static_cast<uint8_t>((pixel >> 16) & 0xff);
+		}
+
+		constexpr uint8_t a() const
+		{
+			return static_cast<uint8_t>((pixel >> 24) & 0xff);
+		}
 
 		enum Mode { NORMAL, MASK, ALPHA, CUSTOM };
 
-		Pixel();
-		Pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha);
-		Pixel(uint32_t p);
-		bool operator==(const Pixel& p) const;
-		bool operator!=(const Pixel& p) const;
+		// WORKAROUND
+		constexpr void init_pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha)
+		{
+			pixel = static_cast<uint32_t>(red | (green << 8) | (blue << 16) | (alpha << 24));
+		}
+
+		constexpr Pixel():
+			pixel{ 0 } { init_pixel(0, 0, 0); }//Pixel{ 0, 0, 0 } { }
+
+#if 0
+		constexpr Pixel(uint8_t red, uint8_t green, uint8_t blue):
+			pixel{ 0 } { init_pixel(red, green, blue); }//Pixel{ red, green, blue, nDefaultAlpha } { }
+#endif
+
+		constexpr Pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha = nDefaultAlpha):
+			pixel{ 0 } { init_pixel(red, green, blue, alpha); }//pixel{ static_cast<uint32_t>(red | (green << 8) | (blue << 16) | (alpha << 24)) } { }
+
+		Pixel(uint32_t p):
+			pixel{ p } { }
+
+		bool operator==(const Pixel& p) const = default;
 	};
 
 	Pixel PixelF(float red, float green, float blue, float alpha = 1.0f);
@@ -308,15 +340,15 @@ namespace olc
 	// O------------------------------------------------------------------------------O
 	// | USEFUL CONSTANTS                                                             |
 	// O------------------------------------------------------------------------------O
-	static const Pixel
-	GREY(192, 192, 192), DARK_GREY(128, 128, 128), VERY_DARK_GREY(64, 64, 64),
-	RED(255, 0, 0),      DARK_RED(128, 0, 0),      VERY_DARK_RED(64, 0, 0),
-	YELLOW(255, 255, 0), DARK_YELLOW(128, 128, 0), VERY_DARK_YELLOW(64, 64, 0),
-	GREEN(0, 255, 0),    DARK_GREEN(0, 128, 0),    VERY_DARK_GREEN(0, 64, 0),
-	CYAN(0, 255, 255),   DARK_CYAN(0, 128, 128),   VERY_DARK_CYAN(0, 64, 64),
-	BLUE(0, 0, 255),     DARK_BLUE(0, 0, 128),     VERY_DARK_BLUE(0, 0, 64),
-	MAGENTA(255, 0, 255),DARK_MAGENTA(128, 0, 128),VERY_DARK_MAGENTA(64, 0, 64),
-	WHITE(255, 255, 255),BLACK(0, 0, 0),           BLANK(0, 0, 0, 0);
+	constexpr Pixel
+	GREY(192, 192, 192),  DARK_GREY(128, 128, 128), VERY_DARK_GREY(64, 64, 64),
+	RED(255, 0, 0),       DARK_RED(128, 0, 0),      VERY_DARK_RED(64, 0, 0),
+	YELLOW(255, 255, 0),  DARK_YELLOW(128, 128, 0), VERY_DARK_YELLOW(64, 64, 0),
+	GREEN(0, 255, 0),     DARK_GREEN(0, 128, 0),    VERY_DARK_GREEN(0, 64, 0),
+	CYAN(0, 255, 255),    DARK_CYAN(0, 128, 128),   VERY_DARK_CYAN(0, 64, 64),
+	BLUE(0, 0, 255),      DARK_BLUE(0, 0, 128),     VERY_DARK_BLUE(0, 0, 64),
+	MAGENTA(255, 0, 255), DARK_MAGENTA(128, 0, 128),VERY_DARK_MAGENTA(64, 0, 64),
+	WHITE(255, 255, 255), BLACK(0, 0, 0),           BLANK(0, 0, 0, 0);
 
 	enum Key
 	{
@@ -342,15 +374,15 @@ namespace olc
 	{
 		T x = 0;
 		T y = 0;
-		inline v2d_generic() : x(0), y(0)                        {                                                            }
-		inline v2d_generic(T _x, T _y) : x(_x), y(_y)            {                                                            }
-		inline v2d_generic(const v2d_generic& v) : x(v.x), y(v.y){                                                            }
-		inline T mag()                                           { return std::sqrt(x * x + y * y);                           }
-		inline T mag2()					                         { return x * x + y * y;                                      }
-		inline v2d_generic  norm()                               { T r = 1 / mag(); return v2d_generic(x*r, y*r);             }
-		inline v2d_generic  perp()                               { return v2d_generic(-y, x);                                 }
-		inline T dot(const v2d_generic& rhs)                     { return this->x * rhs.x + this->y * rhs.y;                  }
-		inline T cross(const v2d_generic& rhs)                   { return this->x * rhs.y - this->y * rhs.x;                  }
+		inline v2d_generic() = default;
+		inline v2d_generic(T _x, T _y) : x(_x), y(_y)                  {                                                            }
+		inline v2d_generic(const v2d_generic& v) : x(v.x), y(v.y)      {                                                            }
+		inline T mag()                                           const { return std::sqrt(x * x + y * y);                           }
+		inline T mag2()                                          const { return x * x + y * y;                                      }
+		inline v2d_generic  norm()                               const { T r = 1 / mag(); return v2d_generic(x*r, y*r);             }
+		inline v2d_generic  perp()                               const { return v2d_generic(-y, x);                                 }
+		inline T dot(const v2d_generic& rhs)                     const { return this->x * rhs.x + this->y * rhs.y;                  }
+		inline T cross(const v2d_generic& rhs)                   const { return this->x * rhs.y - this->y * rhs.x;                  }
 		inline v2d_generic  operator +  (const v2d_generic& rhs) const { return v2d_generic(this->x + rhs.x, this->y + rhs.y);}
 		inline v2d_generic  operator -  (const v2d_generic& rhs) const { return v2d_generic(this->x - rhs.x, this->y - rhs.y);}
 		inline v2d_generic  operator *  (const T& rhs)           const { return v2d_generic(this->x * rhs, this->y * rhs);    }
@@ -364,6 +396,7 @@ namespace olc
 		inline operator v2d_generic<int32_t>() const { return { static_cast<int32_t>(this->x), static_cast<int32_t>(this->y) }; }
 		inline operator v2d_generic<float>() const { return { static_cast<float>(this->x), static_cast<float>(this->y) };     }
 		inline operator v2d_generic<double>() const { return { static_cast<double>(this->x), static_cast<double>(this->y) };  }
+		friend bool operator==(const v2d_generic&, const v2d_generic&) = default;
 	};
 
 	// Note: joshinils has some good suggestions here, but they are complicated to implement at this moment, 
@@ -817,21 +850,6 @@ namespace olc
 	// O------------------------------------------------------------------------------O
 	// | olc::Pixel IMPLEMENTATION                                                    |
 	// O------------------------------------------------------------------------------O
-	Pixel::Pixel()
-	{ r = 0; g = 0; b = 0; a = nDefaultAlpha; }
-
-	Pixel::Pixel(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
-	{ n = red | (green << 8) | (blue << 16) | (alpha << 24); } // Thanks jarekpelczar 
-
-
-	Pixel::Pixel(uint32_t p)
-	{ n = p; }
-
-	bool Pixel::operator==(const Pixel& p) const
-	{ return n == p.n; }
-
-	bool Pixel::operator!=(const Pixel& p) const
-	{ return n != p.n; }
 
 	Pixel PixelF(float red, float green, float blue, float alpha)
 	{
@@ -970,9 +988,9 @@ namespace olc
 		olc::Pixel p4 = GetPixel(std::min(x + 1, (int)width - 1), std::min(y + 1, (int)height - 1));
 
 		return olc::Pixel(
-			(uint8_t)((p1.r * u_opposite + p2.r * u_ratio) * v_opposite + (p3.r * u_opposite + p4.r * u_ratio) * v_ratio),
-			(uint8_t)((p1.g * u_opposite + p2.g * u_ratio) * v_opposite + (p3.g * u_opposite + p4.g * u_ratio) * v_ratio),
-			(uint8_t)((p1.b * u_opposite + p2.b * u_ratio) * v_opposite + (p3.b * u_opposite + p4.b * u_ratio) * v_ratio));
+			(uint8_t)((p1.r() * u_opposite + p2.r() * u_ratio) * v_opposite + (p3.r() * u_opposite + p4.r() * u_ratio) * v_ratio),
+			(uint8_t)((p1.g() * u_opposite + p2.g() * u_ratio) * v_opposite + (p3.g() * u_opposite + p4.g() * u_ratio) * v_ratio),
+			(uint8_t)((p1.b() * u_opposite + p2.b() * u_ratio) * v_opposite + (p3.b() * u_opposite + p4.b() * u_ratio) * v_ratio));
 	}
 
 	Pixel* Sprite::GetData()
@@ -1384,18 +1402,18 @@ namespace olc
 
 		if (nPixelMode == Pixel::MASK)
 		{
-			if(p.a == 255)
+			if(p.a() == 255)
 				return pDrawTarget->SetPixel(x, y, p);
 		}
 
 		if (nPixelMode == Pixel::ALPHA)
 		{
 			Pixel d = pDrawTarget->GetPixel(x, y);
-			float a = (float)(p.a / 255.0f) * fBlendFactor;
+			float a = (float)(p.a() / 255.0f) * fBlendFactor;
 			float c = 1.0f - a;
-			float r = a * (float)p.r + c * (float)d.r;
-			float g = a * (float)p.g + c * (float)d.g;
-			float b = a * (float)p.b + c * (float)d.b;
+			float r = a * (float)p.r() + c * (float)d.r();
+			float g = a * (float)p.g() + c * (float)d.g();
+			float b = a * (float)p.b() + c * (float)d.b();
 			return pDrawTarget->SetPixel(x, y, Pixel((uint8_t)r, (uint8_t)g, (uint8_t)b/*, (uint8_t)(p.a * fBlendFactor)*/));
 		}
 
@@ -2002,7 +2020,7 @@ namespace olc
 		int32_t sy = 0;
 		Pixel::Mode m = nPixelMode;
 		// Thanks @tucna, spotted bug with col.ALPHA :P
-		if(col.a != 255)		SetPixelMode(Pixel::ALPHA);
+		if(col.a() != 255)		SetPixelMode(Pixel::ALPHA);
 		else					SetPixelMode(Pixel::MASK);
 		for (auto c : sText)
 		{
@@ -2019,7 +2037,7 @@ namespace olc
 				{
 					for (uint32_t i = 0; i < 8; i++)
 						for (uint32_t j = 0; j < 8; j++)
-							if (fontSprite->GetPixel(i + ox * 8, j + oy * 8).r > 0)
+							if (fontSprite->GetPixel(i + ox * 8, j + oy * 8).r() > 0)
 								for (uint32_t is = 0; is < scale; is++)
 									for (uint32_t js = 0; js < scale; js++)
 										Draw(x + sx + (i*scale) + is, y + sy + (j*scale) + js, col);
@@ -2028,7 +2046,7 @@ namespace olc
 				{
 					for (uint32_t i = 0; i < 8; i++)
 						for (uint32_t j = 0; j < 8; j++)
-							if (fontSprite->GetPixel(i + ox * 8, j + oy * 8).r > 0)
+							if (fontSprite->GetPixel(i + ox * 8, j + oy * 8).r() > 0)
 								Draw(x + sx + i, y + sy + j, col);
 				}
 				sx += 8 * scale;
@@ -2473,7 +2491,7 @@ namespace olc
 		void DrawLayerQuad(const olc::vf2d& offset, const olc::vf2d& scale, const olc::Pixel tint) override
 		{
 			glBegin(GL_QUADS);
-			glColor4ub(tint.r, tint.g, tint.b, tint.a);
+			glColor4ub(tint.r(), tint.g(), tint.b(), tint.a());
 			glTexCoord2f(0.0f * scale.x + offset.x, 1.0f * scale.y + offset.y);
 			glVertex3f(-1.0f /*+ vSubPixelOffset.x*/, -1.0f /*+ vSubPixelOffset.y*/, 0.0f);
 			glTexCoord2f(0.0f * scale.x + offset.x, 0.0f * scale.y + offset.y);
@@ -2489,7 +2507,7 @@ namespace olc
 		{
 			glBindTexture(GL_TEXTURE_2D, decal.decal->id);
 			glBegin(GL_QUADS);
-			glColor4ub(decal.tint.r, decal.tint.g, decal.tint.b, decal.tint.a);
+			glColor4ub(decal.tint.r(), decal.tint.g(), decal.tint.b(), decal.tint.a());
 			glTexCoord4f(decal.uv[0].x, decal.uv[0].y, 0.0f, decal.w[0]); glVertex2f(decal.pos[0].x, decal.pos[0].y);
 			glTexCoord4f(decal.uv[1].x, decal.uv[1].y, 0.0f, decal.w[1]); glVertex2f(decal.pos[1].x, decal.pos[1].y);
 			glTexCoord4f(decal.uv[2].x, decal.uv[2].y, 0.0f, decal.w[2]); glVertex2f(decal.pos[2].x, decal.pos[2].y);
@@ -2529,7 +2547,7 @@ namespace olc
 
 		void ClearBuffer(olc::Pixel p, bool bDepth) override
 		{
-			glClearColor(float(p.r) / 255.0f, float(p.g) / 255.0f, float(p.b) / 255.0f, float(p.a) / 255.0f);
+			glClearColor(float(p.r()) / 255.0f, float(p.g()) / 255.0f, float(p.b()) / 255.0f, float(p.a()) / 255.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 			if (bDepth) glClear(GL_DEPTH_BUFFER_BIT);
 		}
