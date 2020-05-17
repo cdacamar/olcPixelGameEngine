@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include <charconv>
+#include <chrono>
 #include <concepts>
 #include <execution>
 #include <memory>
@@ -56,6 +57,56 @@ constexpr auto extend(E e) { return E(rep(e) + 1); }
 template <Enum E>
 constexpr E unit = { };
 
+class Stopwatch
+{
+public:
+    using Clock = std::chrono::high_resolution_clock;
+
+    void start()
+    {
+        start_ = Clock::now();
+    }
+
+    void stop()
+    {
+        stop_  = Clock::now();
+    }
+
+    Clock::duration ticks() const
+    {
+        return stop_ - start_;
+    }
+
+    // helpers
+    template <typename Tick>
+    Tick to_ticks() const
+    {
+        return std::chrono::duration_cast<Tick>(ticks());
+    }
+
+    std::chrono::milliseconds to_ms() const
+    {
+        return to_ticks<std::chrono::milliseconds>();
+    }
+
+private:
+    Clock::time_point start_ = { };
+    Clock::time_point stop_ = { };
+};
+
+template <typename T, std::invocable<const T&> F>
+void remove_elements(std::vector<T>& container, F&& predicate)
+{
+    container.erase(std::remove_if(begin(container), end(container), std::forward<F>(predicate)),
+                    end(container));
+}
+
+template <typename T>
+void dequeue_elements(std::vector<T>& container, std::size_t count)
+{
+    container.erase(begin(container),
+                    begin(container) + count);
+}
 
 enum class RandomSeed : decltype(std::random_device{}()) { };
 
@@ -1684,6 +1735,11 @@ public:
 
         constexpr int cull_dead_threshold = 50;
         int dead_count = 0;
+
+        // Track timing.
+        init_timer_collections(steps);
+        Stopwatch stopwatch;
+
         for (int i = 1; i <= steps; ++i)
         {
             if (all_collisions)
@@ -1691,6 +1747,7 @@ public:
                 clear_quadtree(world);
             }
 
+            stopwatch.start();
             for (auto& pixel : pixels_objects)
             {
                 if (pixel.dead())
@@ -1707,15 +1764,33 @@ public:
 
                 pixel.execute_step(world);
 
+#if 1
                 if (all_collisions)
                 {
                     quad_tree->insert(&pixel);
                 }
+#endif
             }
+            stopwatch.stop();
+            current_update_times.push_back(stopwatch.to_ms());
 
             // If we are doing extra interactions, do them.
             if (all_collisions)
             {
+#if 0
+                stopwatch.start();
+                for (auto& pixel : pixels_objects)
+                {
+                    if (!pixel.dead())
+                    {
+                        quad_tree->insert(&pixel);
+                    }
+                }
+                stopwatch.stop();
+                current_tree_build_times.push_back(stopwatch.to_ms());
+#endif
+
+                stopwatch.start();
 #if 1
                 // Note: parallel for_each?
                 std::for_each(std::execution::par, begin(pixels_objects), end(pixels_objects),
@@ -1729,11 +1804,19 @@ public:
                     intersect_objects(world, &pixel);
                 }
 #endif
+                stopwatch.stop();
+                current_collision_times.push_back(stopwatch.to_ms());
             }
         }
 
         if (dead_count >= cull_dead_threshold)
         {
+            remove_elements(pixels_objects,
+                            [](const PhysicsPixel& pixel)
+                            {
+                                return pixel.dead();
+                            });
+#if 0
             pixels_objects.erase(std::remove_if(begin(pixels_objects),
                                         end(pixels_objects),
                                         [](const PhysicsPixel& pixel)
@@ -1741,6 +1824,7 @@ public:
                                             return pixel.dead();
                                         }),
                                     end(pixels_objects));
+#endif
         }
     }
 
@@ -1763,7 +1847,33 @@ public:
     {
         return quad_tree.get();
     }
+
+    const auto& update_times() const
+    {
+        return current_update_times;
+    }
+
+    const auto& tree_build_times() const
+    {
+        return current_tree_build_times;
+    }
+
+    const auto& collision_times() const
+    {
+        return current_collision_times;
+    }
 private:
+    void init_timer_collections(int steps)
+    {
+        current_update_times.clear();
+        current_tree_build_times.clear();
+        current_collision_times.clear();
+        int reserve_quantity = std::max(0, steps); // 'steps' can be negative.
+        current_update_times.reserve(reserve_quantity);
+        current_tree_build_times.reserve(reserve_quantity);
+        current_collision_times.reserve(reserve_quantity);
+    }
+
     void clear_quadtree(const World* world)
     {
         quad_tree = nullptr;
@@ -1797,6 +1907,9 @@ private:
     int left_over_time = 0;
     std::vector<PhysicsPixel> pixels_objects;
     std::unique_ptr<QuadTree> quad_tree;
+    std::vector<std::chrono::milliseconds> current_update_times;
+    std::vector<std::chrono::milliseconds> current_tree_build_times;
+    std::vector<std::chrono::milliseconds> current_collision_times;
     bool all_collisions = true;
 };
 
@@ -1920,6 +2033,7 @@ public:
         }
 
         physics_engine.update(elapsed_time, &world);
+        populate_physics_times();
 
         if (GetMouse(1).bHeld)
         {
@@ -2015,6 +2129,12 @@ public:
         screen_info = info;
         noise_generator.seed_generator(noise_seed(rep(info.width)));
         world.generate_world(info.width, info.height, noise_generator);
+
+        // Debug stuff
+        physics_last_update_times.reserve(max_timer_size);
+        physics_last_tree_build_times.reserve(max_timer_size);
+        physics_last_collision_times.reserve(max_timer_size);
+        time_to_draw_physics.reserve(max_timer_size);
         return Base::Construct(rep(info.width), rep(info.height), rep(info.px_width), rep(info.px_height), false, true);
     }
 
@@ -2025,6 +2145,8 @@ private:
     void draw_physics()
     {
         int alive_particles = 0;
+        Stopwatch stopwatch;
+        stopwatch.start();
         for (const auto& pixel : physics_engine.pixels())
         {
             if (!pixel.dead())
@@ -2061,12 +2183,113 @@ private:
                 }
             }
         }
+        stopwatch.stop();
+        if (time_to_draw_physics.size() + 1 > max_timer_size)
+        {
+            time_to_draw_physics.erase(begin(time_to_draw_physics));
+        }
+        time_to_draw_physics.push_back(stopwatch.to_ms());
 
         {
             std::stringstream ss;
             ss << "All collisions (" << (physics_engine.more_collisions() ? "on" : "off") << ") Particle Count: " << alive_particles;
+
             DrawString({ 10, 20 }, ss.str());
         }
+
+        display_update_times();
+    }
+
+    void display_update_times()
+    {
+        // Physics were not recorded yet.
+        if (physics_last_update_times.empty())
+        {
+            return;
+        }
+        std::stringstream ss;
+        ss << "Last update time (ms): " << physics_last_update_times.back().count();
+        DrawString({ 10, 30 }, ss.str());
+        chart_time_points(physics_last_update_times, { 10, 40 }, Width(200), Height(100));
+        if (!physics_last_tree_build_times.empty())
+        {
+            ss.str("");
+            ss.clear();
+            ss << "Last tree build time (ms): " << physics_last_tree_build_times.back().count();
+            DrawString({ 10, 150 }, ss.str());
+            chart_time_points(physics_last_tree_build_times, { 10, 160 }, Width(200), Height(100));
+        }
+
+        if (!physics_last_collision_times.empty())
+        {
+            ss.str("");
+            ss.clear();
+            ss << "Last collision time (ms): " << physics_last_collision_times.back().count();
+            DrawString({ 10, 270 }, ss.str());
+            chart_time_points(physics_last_collision_times, { 10, 280 }, Width(200), Height(100));
+        }
+
+        if (!time_to_draw_physics.empty())
+        {
+            ss.str("");
+            ss.clear();
+            ss << "Physics draw time (ms): " << time_to_draw_physics.back().count();
+            DrawString({ 10, 390 }, ss.str());
+            chart_time_points(time_to_draw_physics, { 10, 400 }, Width(200), Height(100));
+        }
+    }
+
+    void chart_time_points(const std::vector<std::chrono::milliseconds>& times, const olc::vi2d upper_left, Width width, Height height)
+    {
+        // x = 0;
+        // max_x = width;
+        // y = height; // initial.
+        // max_y = 0;
+        // padding = 5; // pixels between points
+        // 1000ms max
+        // 0ms min
+        // value / 1000ms = scaled value * height for screen pixel.
+
+        using namespace std::literals;
+        constexpr std::chrono::milliseconds max_milli_value = 16ms;
+        constexpr auto scale_to_screen = [&](std::chrono::milliseconds ms)
+        {
+            return rep(height) - static_cast<int>(
+                static_cast<float>(ms.count()) / static_cast<float>(max_milli_value.count()) * rep(height));
+        };
+        int padding = rep(width) / static_cast<int>(times.size());
+        int x = 0;
+        int y = scale_to_screen(times.front());
+        for (int i = 1, last = static_cast<int>(times.size()); i != last; ++i)
+        {
+            int new_x = x + padding;
+            int new_y = scale_to_screen(times[i]);
+            DrawLine({ x + upper_left.x, y + upper_left.y }, { new_x + upper_left.x, new_y + upper_left.y }, olc::RED);
+            x = new_x;
+            y = new_y;
+        }
+    }
+
+    void populate_physics_times()
+    {
+        clamped_append(physics_last_update_times, physics_engine.update_times(), max_timer_size);
+        clamped_append(physics_last_tree_build_times, physics_engine.tree_build_times(), max_timer_size);
+        clamped_append(physics_last_collision_times, physics_engine.collision_times(), max_timer_size);
+    }
+
+    template <typename T>
+    void clamped_append(std::vector<T>& dest, const std::vector<T>& src, const std::size_t clamp_by)
+    {
+        if (src.empty())
+        {
+            return;
+        }
+        auto next_size = src.size() + dest.size();
+        if (next_size > clamp_by)
+        {
+            dequeue_elements(dest, next_size - max_timer_size);
+        }
+        dest.insert(end(dest), begin(src), end(src));
     }
 
     void compute_normals()
@@ -2100,6 +2323,11 @@ private:
     std::vector<std::pair<olc::vi2d, olc::vi2d>> computed_normals;
     std::string display_text;
     bool old_generated = true; // Use old random generated terrain.
+    static constexpr std::size_t max_timer_size = 10;
+    std::vector<std::chrono::milliseconds> physics_last_update_times;
+    std::vector<std::chrono::milliseconds> physics_last_tree_build_times;
+    std::vector<std::chrono::milliseconds> physics_last_collision_times;
+    std::vector<std::chrono::milliseconds> time_to_draw_physics;
 };
 
 int main()
