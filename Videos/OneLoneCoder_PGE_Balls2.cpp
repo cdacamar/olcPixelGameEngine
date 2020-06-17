@@ -66,10 +66,13 @@ David Barr, aka javidx9, ©OneLoneCoder 2018
 #include <iostream>
 #include <string>
 #include <algorithm>
-using namespace std;
 
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
+
+#undef min
+#undef max
+using namespace std;
 
 struct sBall
 {
